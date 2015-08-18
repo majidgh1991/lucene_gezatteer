@@ -1,3 +1,5 @@
+	- To compile, run the command:
+		python script.py
 	- Each line in the reference dataset file should contain one record:
 		<uri>	<ref doc string>
 	- To build indexes for the reference dataset, run the command:
