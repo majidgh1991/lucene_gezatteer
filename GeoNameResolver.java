@@ -1,3 +1,4 @@
+package luceneGazateer;
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -16,24 +17,17 @@
  */
 
 //package src.main.java.edu.usc.ir.geo.gazetteer;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.Scanner;
-import java.util.Comparator;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -43,13 +37,10 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.lang.StringUtils;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.DoubleField;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.IntField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
@@ -62,7 +53,33 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopScoreDocCollector;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
-import org.json.*;
+
+class EntryData{
+	
+	private String id;
+	private String name;
+	private double score;
+	
+	public String getId() {
+		return id;
+	}
+	
+	public String getName() {
+		return name;
+	}
+	
+	public double getScore() {
+		return score;
+	}
+	
+	public static EntryData getInstance(String id, String n, double s){
+		EntryData newEntry = new EntryData();
+		newEntry.id = id;
+		newEntry.name = n;
+		newEntry.score = s;
+		return newEntry;
+	}
+}
 
 public class GeoNameResolver {
 	private static final Logger LOG = Logger.getLogger(GeoNameResolver.class
@@ -71,7 +88,8 @@ public class GeoNameResolver {
 	private static Analyzer analyzer = new StandardAnalyzer();
 	private static IndexWriter indexWriter;
 	private static Directory indexDir;
-	private static int hitsPerPage = 200;
+	private static int hitsPerPage = 100
+			;
 	private static DocType globalDocType = DocType.ELEC_SUPP;
 	
 	static class Tuple<X, Y>{
@@ -95,7 +113,7 @@ public class GeoNameResolver {
 	public enum DocType{
 		ELEC_PART, ELEC_SUPP	
 	}
-	public HashMap<String, ArrayList<String>> searchDocuments(String indexerPath, 
+	public ArrayList<EntryData> searchDocuments(String indexerPath, 
 			String inputRecord, DocType recordType) throws IOException {
 
 		File indexfile = new File(indexerPath);
@@ -133,7 +151,6 @@ public class GeoNameResolver {
 					Document d;
 					try {
 						d = searcher.doc(docId);
-			
 						tmp1.add(d.get("ID"));
 						tmp1.add(d.get("DATA"));
 						tmp1.add(((Float)hits[i].score).toString());
@@ -149,7 +166,7 @@ public class GeoNameResolver {
 			}
 		}
 
-		HashMap<String, ArrayList<String>> resolvedEntities = new HashMap<String, ArrayList<String>>();
+		ArrayList<EntryData> resolvedEntities = new ArrayList<EntryData>();
 		pickBestCandidates(resolvedEntities, allCandidates);
 		reader.close();
 
@@ -173,30 +190,16 @@ public class GeoNameResolver {
 	 */
 
 	private void pickBestCandidates(
-			HashMap<String, ArrayList<String>> resolvedEntities,
+			ArrayList<EntryData> resolvedEntities,
 			HashMap<String, ArrayList<ArrayList<String>>> allCandidates) {
 		//System.out.println("all candidates:"+ allCandidates.size());
 		for (String extractedName : allCandidates.keySet()) {
 			ArrayList<ArrayList<String>> cur = allCandidates.get(extractedName);
 			int minDistance = Integer.MAX_VALUE, minIndex = -1;
-			for (int i = 0; i < cur.size(); ++i) {
-				
-				String resolvedName = cur.get(i).get(0);// get cur's ith
-														// resolved entry's name
-				resolvedEntities.put(resolvedName, cur.get(i));
-				//System.out.println(resolvedName);
-
-//				int distance = StringUtils.getLevenshteinDistance(
-//						extractedName, resolvedName);
-//				if (distance < minDistance) {
-//					
-//					minDistance = distance;
-//					minIndex = i;
-//				}
+			for (ArrayList<String> entry: cur){
+				resolvedEntities.add(EntryData.getInstance(entry.get(0), entry.get(1), Double.parseDouble(entry.get(2))));
 			}
-			//if (minIndex == -1)
-			//	continue;
-			//resolvedEntities.put(extractedName, cur.get(minIndex));
+			
 		}
 	}
 
@@ -259,7 +262,7 @@ public class GeoNameResolver {
 		String id = tokens[0];
 		String data = tokens[1];
 		
-		
+		System.out.println(data);
 		Document doc = new Document();
 		doc.add(new TextField("ID", id, Field.Store.YES));
 		doc.add(new TextField("DATA", data, Field.Store.YES));
@@ -285,40 +288,22 @@ public class GeoNameResolver {
 			try{
 				uri = locArgs[0];
 				testString = locArgs[1];
+				System.out.println(testString);
 			}catch(IndexOutOfBoundsException e){
 				e.printStackTrace();
+				System.exit(-1);
 			}
 			
 			
 			
-			Map<String, ArrayList<String>> resolved = resolver
+			ArrayList<EntryData> resolved = resolver
 				.searchDocuments(indexPath,
 						testString, globalDocType);
-
-			List<String> keys = (List<String>)(List<?>)Arrays.asList(resolved.keySet().toArray());
-            //System.out.println(testString);
-            HashMap<String, Tuple<String, Double>> allCandidates = new HashMap<String, Tuple<String, Double>>();
-			for (int j=0; j < keys.size(); j++) {
-				String n = keys.get(j);
-                
-                
-				ArrayList<String> terms = resolved.get(n);
-                
-				allCandidates.put(terms.get(0), 
-						new Tuple<String, Double>(terms.get(1), Double.parseDouble(terms.get(2))));
-               
-                
-                
-			}
-            
-            
-            ArrayList<Map.Entry<String, Tuple<String, Double>>> candidatesEntryList = 
-                    new ArrayList<Map.Entry<String, Tuple<String, Double>>>();
-            candidatesEntryList.addAll(allCandidates.entrySet());
-            candidatesEntryList.sort(new Comparator<Map.Entry<String, Tuple<String, Double>>>(){
+			
+			resolved.sort(new Comparator<EntryData>(){
                 @Override
-                public int compare(Map.Entry<String, Tuple<String, Double>> e1, Map.Entry<String, Tuple<String, Double>> e2) {
-                    Double diff = e1.getValue().y - e2.getValue().y;
+                public int compare(EntryData e1, EntryData e2) {
+                    Double diff = e1.getScore() - e2.getScore();
                     if(diff < 1e-6 && diff > -1e-6)
                         return 0;
                     else if(diff > 0)
@@ -329,13 +314,13 @@ public class GeoNameResolver {
             ps.write("{\"query_string\":{\"uri\":\""+ uri 
 						+ "\",\"name\":\"" + testString  + "\", \"candidates\":");
             ps.write("[");
-            for(int i = 0 ; i < candidatesEntryList.size() ; i++){
+            for(int i = 0 ; i < resolved.size() ; i++){
             //for(Map.Entry<String, Double> entry : candidatesEntryList){
-            	ps.write("{\"uri\":\"" + candidatesEntryList.get(i).getKey() + "\",");
-				ps.write("\"name\":\"" + candidatesEntryList.get(i).getValue().x + "\",");
-				ps.write("\"score\":\"" + candidatesEntryList.get(i).getValue().y + "\"");
+            	ps.write("{\"uri\":\"" + resolved.get(i).getId() + "\",");
+				ps.write("\"name\":\"" + resolved.get(i).getName() + "\",");
+				ps.write("\"score\":\"" + resolved.get(i).getScore() + "\"");
 				
-				if (i < candidatesEntryList.size() -1){
+				if (i < resolved.size() -1){
 					ps.write("},");						
 				}
 				else{
