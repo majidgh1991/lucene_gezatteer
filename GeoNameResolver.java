@@ -71,8 +71,17 @@ public class GeoNameResolver {
 	private static Analyzer analyzer = new StandardAnalyzer();
 	private static IndexWriter indexWriter;
 	private static Directory indexDir;
-	private static int hitsPerPage = 5;
+	private static int hitsPerPage = 200;
 	private static DocType globalDocType = DocType.ELEC_SUPP;
+	
+	static class Tuple<X, Y>{
+		public final X x;
+		public final Y y;
+		public Tuple(X x, Y y){
+			this.x = x;
+			this.y = y;
+		}
+	}
 
 	/**
 	 * Search corresponding GeoName for each location entity
@@ -92,7 +101,7 @@ public class GeoNameResolver {
 		File indexfile = new File(indexerPath);
 		indexDir = FSDirectory.open(indexfile.toPath());
 
-
+		//inputRecord.replace(","," ");
 		if (!DirectoryReader.indexExists(indexDir)) {
 			LOG.log(Level.SEVERE,
 					"No Lucene Index Dierctory Found, Invoke indexBuild() First !");
@@ -279,47 +288,37 @@ public class GeoNameResolver {
 			}catch(IndexOutOfBoundsException e){
 				e.printStackTrace();
 			}
-			ps.write("{\"query_string\":{\"uri\":\""+ uri 
-						+ "\",\"name\":\"" + testString  + "\", \"candidates\":");
+			
 			
 			
 			Map<String, ArrayList<String>> resolved = resolver
 				.searchDocuments(indexPath,
 						testString, globalDocType);
-			ps.write("[");
+
 			List<String> keys = (List<String>)(List<?>)Arrays.asList(resolved.keySet().toArray());
-            System.out.println(testString);
-            HashMap<String, Double> allCandidates = new HashMap<String, Double>();
+            //System.out.println(testString);
+            HashMap<String, Tuple<String, Double>> allCandidates = new HashMap<String, Tuple<String, Double>>();
 			for (int j=0; j < keys.size(); j++) {
 				String n = keys.get(j);
                 
                 
 				ArrayList<String> terms = resolved.get(n);
                 
-				allCandidates.put(terms.get(1), Double.parseDouble(terms.get(2)));
+				allCandidates.put(terms.get(0), 
+						new Tuple<String, Double>(terms.get(1), Double.parseDouble(terms.get(2))));
                
                 
-                ps.write("{\"uri\":\"" + terms.get(0) + "\",");
-				ps.write("\"name\":\"" + terms.get(1) + "\",");
-				ps.write("\"score\":\"" + terms.get(2) + "\"");
-				
-				if (j < keys.size() -1){
-					ps.write("},");						
-				}
-				else{
-					ps.write("}");
-				}
+                
 			}
-            ps.write("]}}\n");
-			ps.flush();
             
-            ArrayList<Map.Entry<String, Double>> candidatesEntryList = 
-                    new ArrayList<Map.Entry<String, Double>>();
+            
+            ArrayList<Map.Entry<String, Tuple<String, Double>>> candidatesEntryList = 
+                    new ArrayList<Map.Entry<String, Tuple<String, Double>>>();
             candidatesEntryList.addAll(allCandidates.entrySet());
-            candidatesEntryList.sort(new Comparator<Map.Entry<String, Double>>(){
+            candidatesEntryList.sort(new Comparator<Map.Entry<String, Tuple<String, Double>>>(){
                 @Override
-                public int compare(Map.Entry<String, Double> e1, Map.Entry<String, Double> e2) {
-                    Double diff = e1.getValue() - e2.getValue();
+                public int compare(Map.Entry<String, Tuple<String, Double>> e1, Map.Entry<String, Tuple<String, Double>> e2) {
+                    Double diff = e1.getValue().y - e2.getValue().y;
                     if(diff < 1e-6 && diff > -1e-6)
                         return 0;
                     else if(diff > 0)
@@ -327,9 +326,25 @@ public class GeoNameResolver {
                     return 1;
                 }
             });
-            for(Map.Entry<String, Double> entry : candidatesEntryList){
-                System.out.println("\t" + entry.getValue() + "\t" + entry.getKey());
+            ps.write("{\"query_string\":{\"uri\":\""+ uri 
+						+ "\",\"name\":\"" + testString  + "\", \"candidates\":");
+            ps.write("[");
+            for(int i = 0 ; i < candidatesEntryList.size() ; i++){
+            //for(Map.Entry<String, Double> entry : candidatesEntryList){
+            	ps.write("{\"uri\":\"" + candidatesEntryList.get(i).getKey() + "\",");
+				ps.write("\"name\":\"" + candidatesEntryList.get(i).getValue().x + "\",");
+				ps.write("\"score\":\"" + candidatesEntryList.get(i).getValue().y + "\"");
+				
+				if (i < candidatesEntryList.size() -1){
+					ps.write("},");						
+				}
+				else{
+					ps.write("}");
+				}
+                //System.out.println("\t" + entry.getValue() + "\t" + entry.getKey());
             }
+            ps.write("]}}\n");
+			ps.flush();
 			
 		}
 	}
